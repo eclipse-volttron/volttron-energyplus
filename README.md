@@ -93,14 +93,14 @@ inputs:
    source env/bin/activate
    volttron -vv -l volttron.log &>/dev/null &
    ```` 
-4. Install EnergyPlus simulation agent 
+4. Clone the repo then install the EnergyPlus simulation agent 
    ````
-   pip install volttron_lib_energyplus_main-0.1.0-py3-none-any.whl
+   pip install PATH/TO/WHL/FILE
    ````
 
 5. Start EnergyPlus simulation example agent 
    ````
-   vctl install volttron_lib_energyplus_main-0.1.0-py3-none-any.whl --vip-identity platform.actuator --tag eplus --agent-config ep_building1.yaml --start --force
+   vctl install volttron-energyplus --vip-identity platform.actuator --tag eplus --agent-config ep_building1.yaml --start --force
    ````
    
 6. You will see that EnergyPlus simulation starts and sends measurement data to VOLTTRON which is then republished
