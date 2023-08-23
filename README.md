@@ -37,9 +37,9 @@ below. Please ensure that paths to IDF, weather and 'bcvtb' directories are corr
 # Config parameters for setting up EnergyPlus agent
 properties:
     identity: platform.actuator
-    model: ~/git/sim_volttron/volttron/eplus/BUILDING1.idf
-    weather: ~/git/sim_volttron/volttron/eplus/USA_WA_Pasco-Tri.Cities.AP.727845_TMY3.epw
-    bcvtb_home: ~/git/sim_volttron/volttron/bcvtb
+    model: ~/eplus/building1/BUILDING1.idf
+    weather: ~/eplus/building1/USA_WA_Pasco-Tri.Cities.AP.727845_TMY3.epw
+    bcvtb_home: ~/bcvtb/
     size: 40960
     startmonth: 8
     startday: 1
@@ -87,20 +87,20 @@ inputs:
 ````
 
 ## Running EnergyPlus Example agent
+3. Clone volttron-energyplus repository
+   ````
+   git clone repository_name
+   ````
 
-3. In one terminal, start VOLTTRON
+4. In one terminal, start VOLTTRON
    ````
    source env/bin/activate
    volttron -vv -l volttron.log &>/dev/null &
    ```` 
-4. Clone the repo then install the EnergyPlus simulation agent 
-   ````
-   pip install PATH/TO/WHL/FILE
-   ````
 
-5. Start EnergyPlus simulation example agent 
+5. Install and start EnergyPlus simulation example agent. Make sure you have the correct paths for volttron-energyplus and ep_building1.yml
    ````
-   vctl install volttron-energyplus --vip-identity platform.actuator --tag eplus --agent-config ep_building1.yaml --start --force
+   vctl install volttron-energyplus/ --vip-identity platform.actuator --tag eplus --agent-config volttron-energyplus/ep_building1.yml --start --force
    ````
    
 6. You will see that EnergyPlus simulation starts and sends measurement data to VOLTTRON which is then republished
