@@ -9,7 +9,7 @@ eggsecutable = "energyplus.agent:main"
 profile = "black"
 
 [tool.poetry]
-include = ["src/config", "src/ep_building1.yml", "src/bcvtb/**/*", "src/eplus/**/*"]
+include = ["src/config", "src/ep_building1.yml"]
 
 name = "volttron-lib-energyplus-main"
 version = "0.1.0"
