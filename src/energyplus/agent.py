@@ -36,7 +36,6 @@ from volttron.client.vip.agent.core import Core
 from volttron.client.vip.agent.subsystems.rpc import RPC
 
 from integrations.energyplus_integration import EnergyPlusSimIntegration
-from integrations.gridappsd_integration import GridAPPSDSimIntegration
 
 from volttron.client.messaging import headers as headers_mod
 
