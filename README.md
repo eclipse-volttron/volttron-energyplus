@@ -30,7 +30,12 @@ sudo ./EnergyPlus-8.5.0-c87e61b44b-Linux-x86_64.sh
 'eplus' is available at https://github.com/VOLTTRON/volttron-GS/tree/master/eplus
 'bcvtb' is available at https://github.com/VOLTTRON/volttron-GS/tree/master/pnnl/energyplusagent/bcvtb
 
-2. You can specify the configuration in either json or yaml format.  The yaml format is specified
+2. Clone volttron-energyplus repository
+   ````
+   git clone repository_name
+   ````
+
+3. You can specify the configuration in either json or yaml format.  The yaml format is specified
 below. Please ensure that paths to IDF, weather and 'bcvtb' directories are correctly specified.
 
 ```` yaml
@@ -87,12 +92,8 @@ inputs:
 ````
 
 ## Running EnergyPlus Example agent
-3. Clone volttron-energyplus repository
-   ````
-   git clone repository_name
-   ````
 
-4. In one terminal, start VOLTTRON
+4. Start VOLTTRON
    ````
    source env/bin/activate
    volttron -vv -l volttron.log &>/dev/null &
