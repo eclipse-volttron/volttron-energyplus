@@ -1,3 +1,3 @@
 from.energyplus_integration import EnergyPlusSimIntegration
 
-__all__ = ['GridAPPSDSimIntegration']
+__all__ = ['EnergyPlusSimIntegration']
