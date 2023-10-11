@@ -27,69 +27,20 @@ sudo ./EnergyPlus-8.5.0-c87e61b44b-Linux-x86_64.sh
 
 1. Copy 'bcvtb' and 'eplus' folders into root of VOLTTRON source directories. 'eplus' should contain EnergyPlus Input Data File (IDF). IDF file is an ASCII file containing the data describing the building and HVAC system to be simulated.
 
-'eplus' is available at https://github.com/VOLTTRON/volttron-GS/tree/master/eplus
-'bcvtb' is available at https://github.com/VOLTTRON/volttron-GS/tree/master/pnnl/energyplusagent/bcvtb
+   * 'eplus' is available at https://github.com/VOLTTRON/volttron-GS/tree/master/eplus
+   * 'bcvtb' is available at https://github.com/VOLTTRON/volttron-GS/tree/master/pnnl/energyplusagent/bcvtb
 
 2. Clone volttron-energyplus repository
    ````
    git clone repository_name
    ````
 
-3. You can specify the configuration in either json or yaml format.  The yaml format is specified
+3. You can specify the configuration in either json or yaml format. The yaml config is specified in the link
 below. Please ensure that paths to IDF, weather and 'bcvtb' directories are correctly specified.
 
-```` yaml
-# Config parameters for setting up EnergyPlus agent
-properties:
-    identity: platform.actuator
-    model: ~/eplus/building1/BUILDING1.idf
-    weather: ~/eplus/building1/USA_WA_Pasco-Tri.Cities.AP.727845_TMY3.epw
-    bcvtb_home: ~/bcvtb/
-    size: 40960
-    startmonth: 8
-    startday: 1
-    endmonth: 8
-    endday: 31
-    timestep: 60
-    time_scale: 6
-    cosimulation_sync: true
-    real_time_periodic: true
-    co_sim_timestep: 5
-    real_time_flag: false
-# configuration for subscribing to EnergyPlus simulation
-outputs:
-    # List of subscription information, typically contains
-    # - energyplus point name
-    # - type
-    # - publication topic for VOLTTRON (optional) to republish on VOLTTRON message bus
-    # - energyplus 'field' name
-    # - metadata information about the output
-    - sim_topic: ENVIRONMENT Site Outdoor Air Drybulb Temperature1
-      name: ENVIRONMENT
-      type: Site Outdoor Air Drybulb Temperature
-      topic: devices/PNNL/BUILDING1/AHU1/all
-      field: OutdoorAirTemperature
-      meta:
-         units: degreesCentigrade
-         tz: US/Pacific
-         type: float
-# configuration for sending to EnergyPlus simulation
-inputs:
-    # List of subscription information typically contains
-    # - EnergyPlus input name
-    # - type
-    # - subscription topic for VOLTTRON to receive message from VOLTTRON (agents)
-    # - EnergyPlus field
-    # - default value (if any)
-    # - dynamic default (receive dynamic default from
-    - sim_topic: CLGTEMPSETPOINT Zone-VAV-102
-      name: CLGTEMPSETPOINT Zone-VAV-102
-      type: schedule
-      topic: PNNL/BUILDING1/AHU1/VAV102
-      field: ZoneCoolingTemperatureSetPoint
-      default: 21.11
-      dynamic_default: 1.0
-````
+
+   * https://raw.githubusercontent.com/riley206/volttron-energyplus/main/ep_building1.yml
+
 
 ## Running EnergyPlus Example agent
 
