@@ -351,11 +351,11 @@ class EnergyPlusAgent(Agent):
         timestep = int(60 / self.EnergyPlus_sim.timestep)
 
         if not self.EnergyPlus_sim.real_time_flag:
-            self.cosim_sync_counter += timestep
-            if self.cosim_sync_counter < self.EnergyPlus_sim.co_sim_timestep:
+            self.EnergyPlus_sim.cosim_sync_counter += timestep
+            if self.EnergyPlus_sim.cosim_sync_counter < self.EnergyPlus_sim.co_sim_timestep:
                 self.advance_simulation(None, None, None, None, None, None)
             else:
-                self.cosim_sync_counter = 0
+                self.EnergyPlus_sim.cosim_sync_counter = 0
                 self.vip.pubsub.publish('pubsub',
                                         self.tns_actuate,
                                         headers={},
@@ -363,11 +363,11 @@ class EnergyPlusAgent(Agent):
         else:
             if self.EnergyPlus_sim.hour > self.EnergyPlus_sim.currenthour or self.EnergyPlus_sim.passtime:
                 self.EnergyPlus_sim.passtime = True
-                self.cosim_sync_counter += timestep
-                if self.cosim_sync_counter < self.EnergyPlus_sim.co_sim_timestep:
+                self.EnergyPlus_sim.cosim_sync_counter += timestep
+                if self.EnergyPlus_sim.cosim_sync_counter < self.EnergyPlus_sim.co_sim_timestep:
                     self.advance_simulation(None, None, None, None, None, None)
                 else:
-                    self.cosim_sync_counter = 0
+                    self.EnergyPlus_sim.cosim_sync_counter = 0
                     self.vip.pubsub.publish('pubsub',
                                             self.tns_actuate,
                                             headers={},
