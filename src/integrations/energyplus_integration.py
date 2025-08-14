@@ -23,13 +23,13 @@
 
 import os
 import logging
-from gevent import monkey, sleep
+from gevent import monkey
 import weakref
 import socket
 import subprocess
 from datetime import datetime
 from calendar import monthrange
-from base_simulation_integration.base_sim_integration import BaseSimIntegration
+from ..base_simulation_integration.base_sim_integration import BaseSimIntegration
 
 
 monkey.patch_socket()

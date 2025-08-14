@@ -28,22 +28,27 @@ import gevent
 import logging
 import sys
 import collections
-from datetime import datetime
-import volttron.utils as utils
 
-from volttron.client.vip.agent import Agent
-from volttron.client.vip.agent.core import Core
-from volttron.client.vip.agent.subsystems.rpc import RPC
-
-from integrations.energyplus_integration import EnergyPlusSimIntegration
-
-from volttron.client.messaging import headers as headers_mod
-
-from datetime import timedelta as td
+from datetime import datetime, timedelta as td
 from math import modf
 
+from importlib.metadata import distribution, PackageNotFoundError
+try:
+    distribution('volttron-core')
+    from volttron.client.logs import setup_logging
+    from volttron.client.messaging import headers as headers_mod
+    from volttron.client.vip.agent import Agent, Core, RPC
+    from volttron.utils import load_config, vip_main
+except PackageNotFoundError:
+    from volttron.platform.agent.utils import setup_logging
+    from volttron.platform.messaging import headers as headers_mod
+    from volttron.platform.vip.agent import Agent, Core, RPC
+
+from ..integrations.energyplus_integration import EnergyPlusSimIntegration
+
+setup_logging()
 _log = logging.getLogger(__name__)
-utils.setup_logging()
+
 __version__ = "0.1"
 
 SUCCESS = 'SUCCESS'
@@ -62,7 +67,7 @@ def energyplus_example(config_path, **kwargs):
     """
     _log.debug("CONFIG PATH: {}".format(config_path))
     try:
-        config = utils.load_config(config_path)
+        config = load_config(config_path)
     except Exception:
         config = {}
     if not config:
@@ -596,7 +601,7 @@ class EnergyPlusAgent(Agent):
 
 def main():
     """Main method called to start the agent."""
-    utils.vip_main(energyplus_example, version=__version__)
+    vip_main(energyplus_example, version=__version__)
 
 
 if __name__ == '__main__':
