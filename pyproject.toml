@@ -11,7 +11,7 @@ profile = "black"
 [tool.poetry]
 include = ["src/config", "src/ep_building1.yml"]
 
-name = "volttron-lib-energyplus-main"
+name = "volttron-energyplus"
 version = "0.1.0"
 description = ""
 authors = ["VOLTTRON Team <volttron@pnnl.gov>"]
