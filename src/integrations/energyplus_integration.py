@@ -151,7 +151,6 @@ class EnergyPlusSimIntegration(BaseSimIntegration):
 
         if not self.model:
             self.exit(f'No model: {self.model} specified.')
-            _log.debug('Model found is', self.model, model)
         if not self.weather:
             self.exit('No weather specified.')
         model_path = self.model
@@ -184,7 +183,6 @@ class EnergyPlusSimIntegration(BaseSimIntegration):
         f = open(model_path, 'r')
         lines = f.readlines()
         f.close()
-        endmonth = 0
         if self.currentday + self.length > self.maxday:
             endday = self.currentday + self.length - self.maxday
             endmonth = self.currentmonth + 1
@@ -211,11 +209,11 @@ class EnergyPlusSimIntegration(BaseSimIntegration):
                 else:
                     lines[i + 1] = '  ' + str(self.timestep) + ';' + '\n'
         if self.customizedOutT > 0:
-            lines.append('ExternalInterface:Actuator,') + '\n'
-            lines.append('    outT,     !- Name') + '\n'
-            lines.append('    Environment,  !- Actuated Component Unique Name') + '\n'
-            lines.append('    Weather Data,  !- Actuated Component Type') + '\n'
-            lines.append('    Outdoor Dry Bulb;          !- Actuated Component Control Type') + '\n'
+            lines.append('ExternalInterface:Actuator,\n')
+            lines.append('    outT,     !- Name\n')
+            lines.append('    Environment,  !- Actuated Component Unique Name\n')
+            lines.append('    Weather Data,  !- Actuated Component Type\n')
+            lines.append('    Outdoor Dry Bulb;          !- Actuated Component Control Type\n')
         f = open(model_path, 'w')
 
         for i in range(len(lines)):
@@ -435,8 +433,8 @@ class SocketServer:
         if self.client is not None and self.sock is not None:
             try:
                 self.client.send(self.sent)
-            except Exception:
-                _log.error('We got an error trying to send a message.')
+            except Exception as e:
+                _log.error(f'We got an error trying to send a message: {e}.')
 
     def recv(self):
         if self.client is not None and self.sock is not None:
