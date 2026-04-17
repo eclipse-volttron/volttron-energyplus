@@ -44,7 +44,7 @@ except PackageNotFoundError:
     from volttron.platform.messaging import headers as headers_mod
     from volttron.platform.vip.agent import Agent, Core, RPC
 
-from ..integrations.energyplus_integration import EnergyPlusSimIntegration
+from integrations.energyplus_integration import EnergyPlusSimIntegration
 
 setup_logging()
 _log = logging.getLogger(__name__)

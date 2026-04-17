@@ -21,18 +21,20 @@
 #
 # ===----------------------------------------------------------------------===
 
-import os
-import logging
 from gevent import monkey
-import weakref
+monkey.patch_socket()
+
+import logging
+import os
 import socket
 import subprocess
-from datetime import datetime
+import weakref
+
 from calendar import monthrange
-from ..base_simulation_integration.base_sim_integration import BaseSimIntegration
+from datetime import datetime
 
+from base_simulation_integration.base_sim_integration import BaseSimIntegration
 
-monkey.patch_socket()
 _log = logging.getLogger(__name__)
 __version__ = '1.0'
 
