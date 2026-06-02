@@ -166,3 +166,11 @@ cython_debug/
 #  and can be added to the global gitignore or merged into this file.  For a more nuclear
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
+
+# Allow otherwise excluded folder names in the BCVTB folder:
+!src/energyplus/bcvtb/
+!src/energyplus/bcvtb/lib/
+!src/energyplus/bcvtb/lib/xml/
+!src/energyplus/bcvtb/lib/xml/build/
+!src/energyplus/bcvtb/lib/xml/build/jar/
+!src/energyplus/bcvtb/lib/xml/build/jar/DTDValidator.jar

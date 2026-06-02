@@ -24,16 +24,22 @@
 from gevent import monkey
 monkey.patch_socket()
 
+import json
 import logging
 import os
+import shutil
 import socket
 import subprocess
+import sys
+import tempfile
 import weakref
 
 from calendar import monthrange
 from datetime import datetime
+from importlib import resources
+from pathlib import Path
 
-from base_simulation_integration.base_sim_integration import BaseSimIntegration
+from volttron.types.base_sim_integration import BaseSimIntegration
 
 _log = logging.getLogger(__name__)
 __version__ = '1.0'
@@ -55,10 +61,10 @@ class EnergyPlusSimIntegration(BaseSimIntegration):
         self.outputs = []
         self.current_values = {}
         self.version = 8.4
-        self.bcvtb_home = '.'
+        self.bcvtb_home = str(resources.files('energyplus.bcvtb').joinpath(''))
         self.model = None
         self.customizedOutT = 0
-        self.weather = None
+        self.weather = str(resources.files('energyplus.weather').joinpath('USA_WA_Pasco-Tri.Cities.AP.727845_TMY3.epw'))
         self.socketFile = None
         self.variableFile = None
         self.time = 0
@@ -97,6 +103,9 @@ class EnergyPlusSimIntegration(BaseSimIntegration):
         self.endday = None
         self.sim_flag = 0
         self.cwd = os.getcwd()
+        self.model_idf_path = None
+        self.output_dir = None
+        self.temp_directory = None
 
     def exit(self, msg):
         self.stop()
@@ -126,11 +135,38 @@ class EnergyPlusSimIntegration(BaseSimIntegration):
                     'Inputs from configuration must be a list of dictionaries or a dictionary of dictionaries')
             return parsed
 
+        self.load_properties()
         self.inputs = parse_input_output(self.config.get('inputs', []))
         self.outputs = parse_input_output(self.config.get('outputs', []))
+        self.callback = callback
+
+    def load_properties(self):
+        model = self.config.get('properties', {}).get('model', '')
+        if model in [m.name for m in resources.files('energyplus.models').iterdir()]:
+            with resources.as_file(resources.files(f'energyplus.models').joinpath(model)) as model_source_path:
+                model_config_path = model_source_path / f'{model}.config'
+                self.model_idf_path = model_source_path / f'{model}.idf'
+            with open(model_config_path, 'r') as f:
+                model_config = json.load(f)
+                properties = model_config.get('properties', {}).copy()
+                properties.update(self.config.get('properties', {}))
+                self.config['properties'] = properties
+        else:
+            if not Path(model).expanduser().resolve().exists():
+                _log.error(f'Configured model "{model}" is not found in built-in models and is not an IDF file path.')
+                sys.exit(1)
         if 'properties' in self.config and isinstance(self.config['properties'], dict):
             self.__dict__.update(self.config['properties'])
-        self.callback = callback
+        self.weather = Path(weather if (weather := self.config.get('properties', {}).get('weather')) else self.weather
+                                 ).expanduser().resolve()
+        if not self.output_dir:
+            self.temp_directory = self.output_dir = Path(tempfile.mkdtemp())
+        else:
+            self.output_dir = Path(self.output_dir).expanduser().resolve()
+        if self.model_idf_path.parent != self.output_dir:
+            shutil.copy(self.model_idf_path, self.output_dir)
+        if self.weather.parent != self.output_dir:
+            shutil.copy(self.weather, self.output_dir)
 
     def start_socket_server(self):
         """
@@ -155,39 +191,24 @@ class EnergyPlusSimIntegration(BaseSimIntegration):
         """
         Check the model path and start EnergyPlus
         """
-        _log.debug(f"Current Model Path: {self.model}")
-        _log.debug(f"Current Weather Path: {self.weather}")
-
-        if not self.model:
+        if not self.model_idf_path:
             self.exit(f'No model: {self.model} specified.')
         if not self.weather:
             self.exit('No weather specified.')
-        model_path = self.model
-        if model_path[0] == '~':
-            model_path = os.path.expanduser(model_path)
-        if model_path[0] != '/':
-            model_path = os.path.join(self.cwd, model_path)
-        weather_path = self.weather
-        if weather_path[0] == '~':
-            weather_path = os.path.expanduser(weather_path)
-        if weather_path[0] != '/':
-            weather_path = os.path.join(self.cwd, weather_path)
-        model_dir = os.path.dirname(model_path)
-        bcvtb_dir = self.bcvtb_home
-        if bcvtb_dir[0] == '~':
-            bcvtb_dir = os.path.expanduser(bcvtb_dir)
-        if bcvtb_dir[0] != '/':
-            bcvtb_dir = os.path.join(self.cwd, bcvtb_dir)
-        _log.debug('Working in %r', model_dir)
+        model_path = self.output_dir.joinpath(Path(self.model_idf_path).name)
+        weather_path = self.output_dir.joinpath(Path(self.weather).name)
+        _log.debug(f"Current Model Path: {model_path}")
+        _log.debug(f"Current Weather Path: {weather_path}")
+        bcvtb_dir = Path(self.bcvtb_home).expanduser().resolve()
+        _log.debug('Working in %r', self.output_dir)
 
-        self._write_port_file(os.path.join(model_dir, 'socket.cfg'))
-        self._write_variable_file(os.path.join(model_dir, 'variables.cfg'))
+        self._write_port_file(os.path.join(self.output_dir, 'socket.cfg'))
+        self._write_variable_file(os.path.join(self.output_dir, 'variables.cfg'))
 
         if self.version >= 8.4:
-            cmd_str = "cd %s; export BCVTB_HOME=%s; energyplus -w %s -r %s" % (
-                model_dir, bcvtb_dir, weather_path, model_path)
+            cmd_str = f"cd {self.output_dir}; export BCVTB_HOME={bcvtb_dir}; energyplus -w {weather_path} -r {model_path}"
         else:
-            cmd_str = "export BCVTB_HOME=%s; runenergyplus %s %s" % (bcvtb_dir, model_path, weather_path)
+            cmd_str = f"export BCVTB_HOME={bcvtb_dir}; runenergyplus {model_path} {weather_path}"
         _log.debug('Running: %s', cmd_str)
         f = open(model_path, 'r')
         lines = f.readlines()
@@ -373,6 +394,8 @@ class EnergyPlusSimIntegration(BaseSimIntegration):
         Stop EnergyPlus simulation
         :return:
         """
+        if self.temp_directory:
+            shutil.rmtree(self.temp_directory)
         if self.socket_server:
             # Close connection to EnergyPlus server
             self.socket_server.stop()
