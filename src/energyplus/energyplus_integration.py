@@ -24,13 +24,11 @@
 from gevent import monkey
 monkey.patch_socket()
 
-import json
 import logging
 import os
 import shutil
 import socket
 import subprocess
-import sys
 import tempfile
 import weakref
 
@@ -103,9 +101,24 @@ class EnergyPlusSimIntegration(BaseSimIntegration):
         self.endday = None
         self.sim_flag = 0
         self.cwd = os.getcwd()
-        self.model_idf_path = None
-        self.output_dir = None
+        self.model_idf_path = config.get('model_idf_path')
+        self.output_dir = ''
         self.temp_directory = None
+
+        if 'properties' in self.config and isinstance(self.config['properties'], dict):
+            self.__dict__.update(self.config['properties'])
+
+        self.weather = Path(
+            weather if (weather := config.get('properties', {}).get('weather')) else self.weather
+            ).expanduser().resolve()
+        if not self.output_dir:
+            self.temp_directory = self.output_dir = Path(tempfile.mkdtemp())
+        else:
+            self.output_dir = Path(self.output_dir).expanduser().resolve()
+        if self.model_idf_path and self.model_idf_path.parent != self.output_dir:
+            shutil.copy(self.model_idf_path, self.output_dir)
+        if self.weather.parent != self.output_dir:
+            shutil.copy(self.weather, self.output_dir)
 
     def exit(self, msg):
         self.stop()
@@ -135,38 +148,9 @@ class EnergyPlusSimIntegration(BaseSimIntegration):
                     'Inputs from configuration must be a list of dictionaries or a dictionary of dictionaries')
             return parsed
 
-        self.load_properties()
         self.inputs = parse_input_output(self.config.get('inputs', []))
         self.outputs = parse_input_output(self.config.get('outputs', []))
         self.callback = callback
-
-    def load_properties(self):
-        model = self.config.get('properties', {}).get('model', '')
-        if model in [m.name for m in resources.files('energyplus.models').iterdir()]:
-            with resources.as_file(resources.files(f'energyplus.models').joinpath(model)) as model_source_path:
-                model_config_path = model_source_path / f'{model}.config'
-                self.model_idf_path = model_source_path / f'{model}.idf'
-            with open(model_config_path, 'r') as f:
-                model_config = json.load(f)
-                properties = model_config.get('properties', {}).copy()
-                properties.update(self.config.get('properties', {}))
-                self.config['properties'] = properties
-        else:
-            if not Path(model).expanduser().resolve().exists():
-                _log.error(f'Configured model "{model}" is not found in built-in models and is not an IDF file path.')
-                sys.exit(1)
-        if 'properties' in self.config and isinstance(self.config['properties'], dict):
-            self.__dict__.update(self.config['properties'])
-        self.weather = Path(weather if (weather := self.config.get('properties', {}).get('weather')) else self.weather
-                                 ).expanduser().resolve()
-        if not self.output_dir:
-            self.temp_directory = self.output_dir = Path(tempfile.mkdtemp())
-        else:
-            self.output_dir = Path(self.output_dir).expanduser().resolve()
-        if self.model_idf_path.parent != self.output_dir:
-            shutil.copy(self.model_idf_path, self.output_dir)
-        if self.weather.parent != self.output_dir:
-            shutil.copy(self.weather, self.output_dir)
 
     def start_socket_server(self):
         """

@@ -24,13 +24,17 @@
 
 __docformat__ = 'reStructuredText'
 
+import collections
 import gevent
+import json
 import logging
 import sys
-import collections
+
 
 from datetime import datetime, timedelta as td
+from importlib import resources
 from math import modf
+from pathlib import Path
 
 from importlib.metadata import distribution, PackageNotFoundError
 try:
@@ -55,65 +59,73 @@ SUCCESS = 'SUCCESS'
 FAILURE = 'FAILURE'
 
 
-def energyplus_example(config_path, **kwargs):
-    """Parses the Agent configuration and returns an instance of
-    the agent created using that configuration.
-
-    :param config_path: Path to a configuration file.
-
-    :type config_path: str
-    :returns: EnergyPlusAgent
-    :rtype: EnergyPlusAgent
-    """
-    _log.debug("CONFIG PATH: {}".format(config_path))
-    try:
-        config = load_config(config_path)
-    except Exception:
-        config = {}
-    if not config:
-        _log.info("Using Agent defaults for starting configuration.")
-
-    return EnergyPlusAgent(config, **kwargs)
-
-
 class EnergyPlusAgent(Agent):
-    def __init__(self, config, **kwargs):
+    def __init__(self, config_path, **kwargs):
         super(EnergyPlusAgent, self).__init__(enable_store=False, **kwargs)
-        self.config = config
-        self.inputs = []
+        try:
+            config = load_config(config_path)
+        except Exception as e:
+            _log.warning(f'Exception loading packaged configuration: {e}')
+            config = {}
+        self.default_config = config
         self.outputs = []
         self.cosimulation_advance = None
         self._now = None
         self.num_of_pub = None
         self.tns_actuate = None
         self.rt_periodic = None
-        self.EnergyPlus_sim = EnergyPlusSimIntegration(self.config, self.vip.pubsub, self.core)
-        _log.debug("vip_identity: " + self.core.identity)
+        self.energy_plus_sim = None
 
-    @Core.receiver('onsetup')
-    def setup(self, sender, **kwargs):
-        if 'outputs' in self.config:
-            self.outputs = self.config['outputs']
+        self.vip.config.set_default('config', self.default_config)
+        self.vip.config.subscribe(self.configure_main, actions=["NEW", "UPDATE"], pattern="config")
 
-        self.cosimulation_advance = self.config.get('cosimulation_advance', None)
-        self._now = datetime.utcnow()
-        self.num_of_pub = 0
-
-    @Core.receiver('onstart')
-    def start(self, sender, **kwargs):
+    def configure_main(self, _, __, contents):
         """
         Subscribe to VOLTTRON topics on VOLTTRON message bus.
         Register config parameters with EnergyPlus
         Start EnergyPlus simulation.
         """
+        config: dict = self.default_config | contents
+
+        model = config.get('properties', {}).get('model', '')
+        if model in [m.name for m in resources.files('energyplus.models').iterdir()]:
+            with resources.as_file(resources.files(f'energyplus.models').joinpath(model)) as model_source_path:
+                model_config_path = model_source_path / f'{model}.config'
+                model_idf_path = model_source_path / f'{model}.idf'
+            with open(model_config_path, 'r') as f:
+                model_config = json.load(f)
+                properties = model_config.get('properties', {}).copy()
+                properties.update(config.get('properties', {}))
+                config['properties'] = properties
+                inputs = model_config.get('inputs', {}).copy()
+                inputs.update(config.get('inputs', {}))
+                config['inputs'] = inputs
+                outputs = model_config.get('outputs', {}).copy()
+                outputs.update(config.get('outputs', {}))
+                config['outputs'] = model_config['outputs']
+        else:
+            if not (model_idf_path := Path(model).expanduser().resolve()).exists():
+                _log.error(
+                    f'Configured model "{model}" is not found in built-in models and is not an IDF file path.')
+                sys.exit(1)
+        config['model_idf_path'] = model_idf_path
+
+        self.energy_plus_sim = EnergyPlusSimIntegration(config, self.vip.pubsub, self.core)
+
+        self._now = datetime.utcnow() # TODO: Can we use aware timestamps?
+        self.num_of_pub = 0
+
         # Exit if EnergyPlus isn't installed in the current environment.
-        if not self.EnergyPlus_sim.is_sim_installed():
+        if not self.energy_plus_sim.is_sim_installed():
             _log.error("EnergyPlus is unavailable please install it before running this agent.")
             self.core.stop()
             return
 
         # Register the config and output callback with EnergyPlus
-        self.EnergyPlus_sim.register_inputs(self.config, self.do_work)
+        self.energy_plus_sim.register_inputs(config, self.do_work)
+
+        self.outputs = self.energy_plus_sim.outputs
+        self.cosimulation_advance = self.energy_plus_sim.config.get('cosimulation_advance', None)
 
         # Pick out VOLTTRON topics and subscribe to VOLTTRON message bus
         self.subscribe()
@@ -124,14 +136,14 @@ class EnergyPlusAgent(Agent):
                                       prefix=self.cosimulation_advance,
                                       callback=self.advance_simulation)
         # Start EnergyPlus simulation
-        self.EnergyPlus_sim.start_simulation()
+        self.energy_plus_sim.start_simulation()
 
     def subscribe(self):
         """
         Subscribe to VOLTTRON topics
         :return:
         """
-        for obj in self.EnergyPlus_sim.inputs:
+        for obj in self.energy_plus_sim.inputs:
 
             topic = obj.get('topic', None)
             if topic is not None:
@@ -197,30 +209,30 @@ class EnergyPlusAgent(Agent):
         """
         self._now = self._now + td(minutes=1)
 
-        if self.EnergyPlus_sim.month is None or \
-                self.EnergyPlus_sim.day is None or \
-                self.EnergyPlus_sim.minute is None or \
-                self.EnergyPlus_sim.hour is None:
+        if self.energy_plus_sim.month is None or \
+                self.energy_plus_sim.day is None or \
+                self.energy_plus_sim.minute is None or \
+                self.energy_plus_sim.hour is None:
             _now = self._now
         else:
             if self.num_of_pub >= 1:
-                if abs(self.EnergyPlus_sim.minute - 60.0) < 0.5:
-                    self.EnergyPlus_sim.hour += 1.0
-                    self.EnergyPlus_sim.minute = 0.0
-                if abs(self.EnergyPlus_sim.hour - 24.0) < 0.5:
-                    self.EnergyPlus_sim.hour = 0.0
-                    self.EnergyPlus_sim.day += 1.0
+                if abs(self.energy_plus_sim.minute - 60.0) < 0.5:
+                    self.energy_plus_sim.hour += 1.0
+                    self.energy_plus_sim.minute = 0.0
+                if abs(self.energy_plus_sim.hour - 24.0) < 0.5:
+                    self.energy_plus_sim.hour = 0.0
+                    self.energy_plus_sim.day += 1.0
             else:
-                self.EnergyPlus_sim.hour = 0.0
-                self.EnergyPlus_sim.minute = 0.0
-            second, minute = modf(self.EnergyPlus_sim.minute)
-            self.EnergyPlus_sim.second = int(second * 60.0)
-            self.EnergyPlus_sim.minute = int(minute)
-            date_string = '2017-' + str(self.EnergyPlus_sim.month).replace('.0', '') + \
-                          '-' + str(self.EnergyPlus_sim.day).replace('.0', '') + ' ' + \
-                          str(self.EnergyPlus_sim.hour).replace('.0', '') + ':' + \
-                          str(self.EnergyPlus_sim.minute) + ':' + \
-                          str(self.EnergyPlus_sim.second)
+                self.energy_plus_sim.hour = 0.0
+                self.energy_plus_sim.minute = 0.0
+            second, minute = modf(self.energy_plus_sim.minute)
+            self.energy_plus_sim.second = int(second * 60.0)
+            self.energy_plus_sim.minute = int(minute)
+            date_string = '2017-' + str(self.energy_plus_sim.month).replace('.0', '') + \
+                          '-' + str(self.energy_plus_sim.day).replace('.0', '') + ' ' + \
+                          str(self.energy_plus_sim.hour).replace('.0', '') + ':' + \
+                          str(self.energy_plus_sim.minute) + ':' + \
+                          str(self.energy_plus_sim.second)
             _now = datetime.strptime(date_string, "%Y-%m-%d %H:%M:%S")
         _now = _now.isoformat(' ') + 'Z'
         return _now
@@ -267,14 +279,14 @@ class EnergyPlusAgent(Agent):
         """
         if self.all_topics_updated():
             self.clear_last_update()
-            self.EnergyPlus_sim.send_eplus_msg()
+            self.energy_plus_sim.send_eplus_msg()
 
     def all_topics_updated(self):
         """
         Check if all input messages have been updated
         :return:
         """
-        for obj in self.EnergyPlus_sim.inputs:
+        for obj in self.energy_plus_sim.inputs:
             if 'topic' in obj:
                 last_update = obj.get('last_update', None)
                 if last_update is None:
@@ -286,7 +298,7 @@ class EnergyPlusAgent(Agent):
         Clear 'last_update' flag
         :return:
         """
-        for obj in self.EnergyPlus_sim.inputs:
+        for obj in self.energy_plus_sim.inputs:
             if 'topic' in obj:
                 obj['last_update'] = None
 
@@ -297,7 +309,7 @@ class EnergyPlusAgent(Agent):
         :return:
         """
         objs = []
-        for obj in self.EnergyPlus_sim.inputs:
+        for obj in self.energy_plus_sim.inputs:
             _log.debug("EPLUS: get_inputs_from_topic: {}".format(obj))
             if obj.get('topic') == topic:
                 objs.append(obj)
@@ -337,42 +349,42 @@ class EnergyPlusAgent(Agent):
         - Periodically advance simulation by sending and receiving messages to EnergyPlus
         :return:
         """
-        self.outputs = self.EnergyPlus_sim.outputs
-        if self.EnergyPlus_sim.sim_flag != '1':
+        self.outputs = self.energy_plus_sim.outputs
+        if self.energy_plus_sim.sim_flag != '1':
             self.publish_all_outputs()
-        if self.EnergyPlus_sim.cosimulation_sync:
+        if self.energy_plus_sim.cosimulation_sync:
             self.check_advance()
-        if self.EnergyPlus_sim.real_time_periodic and self.rt_periodic is None:
-            _log.debug("do_work: self.EnergyPlus_sim.timestep: {}".format(self.EnergyPlus_sim.timestep))
-            self.EnergyPlus_sim.timestep = 60. / (self.EnergyPlus_sim.timestep * self.EnergyPlus_sim.time_scale) * 60.
-            _log.debug("do_work: self.EnergyPlus_sim.timestep: {}".format(self.EnergyPlus_sim.timestep))
-            self.rt_periodic = self.core.periodic(self.EnergyPlus_sim.timestep,
+        if self.energy_plus_sim.real_time_periodic and self.rt_periodic is None:
+            _log.debug("do_work: self.EnergyPlus_sim.timestep: {}".format(self.energy_plus_sim.timestep))
+            self.energy_plus_sim.timestep = 60. / (self.energy_plus_sim.timestep * self.energy_plus_sim.time_scale) * 60.
+            _log.debug("do_work: self.EnergyPlus_sim.timestep: {}".format(self.energy_plus_sim.timestep))
+            self.rt_periodic = self.core.periodic(self.energy_plus_sim.timestep,
                                                   self.run_periodic,
-                                                  wait=self.EnergyPlus_sim.timestep)
+                                                  wait=self.energy_plus_sim.timestep)
 
     def check_advance(self):
-        if self.EnergyPlus_sim.real_time_periodic:
+        if self.energy_plus_sim.real_time_periodic:
             return
-        timestep = int(60 / self.EnergyPlus_sim.timestep)
+        timestep = int(60 / self.energy_plus_sim.timestep)
 
-        if not self.EnergyPlus_sim.real_time_flag:
-            self.EnergyPlus_sim.cosim_sync_counter += timestep
-            if self.EnergyPlus_sim.cosim_sync_counter < self.EnergyPlus_sim.co_sim_timestep:
+        if not self.energy_plus_sim.real_time_flag:
+            self.energy_plus_sim.cosim_sync_counter += timestep
+            if self.energy_plus_sim.cosim_sync_counter < self.energy_plus_sim.co_sim_timestep:
                 self.advance_simulation(None, None, None, None, None, None)
             else:
-                self.EnergyPlus_sim.cosim_sync_counter = 0
+                self.energy_plus_sim.cosim_sync_counter = 0
                 self.vip.pubsub.publish('pubsub',
                                         self.tns_actuate,
                                         headers={},
                                         message={}).get(timeout=10)
         else:
-            if self.EnergyPlus_sim.hour > self.EnergyPlus_sim.currenthour or self.EnergyPlus_sim.passtime:
-                self.EnergyPlus_sim.passtime = True
-                self.EnergyPlus_sim.cosim_sync_counter += timestep
-                if self.EnergyPlus_sim.cosim_sync_counter < self.EnergyPlus_sim.co_sim_timestep:
+            if self.energy_plus_sim.hour > self.energy_plus_sim.currenthour or self.energy_plus_sim.passtime:
+                self.energy_plus_sim.passtime = True
+                self.energy_plus_sim.cosim_sync_counter += timestep
+                if self.energy_plus_sim.cosim_sync_counter < self.energy_plus_sim.co_sim_timestep:
                     self.advance_simulation(None, None, None, None, None, None)
                 else:
-                    self.EnergyPlus_sim.cosim_sync_counter = 0
+                    self.energy_plus_sim.cosim_sync_counter = 0
                     self.vip.pubsub.publish('pubsub',
                                             self.tns_actuate,
                                             headers={},
@@ -388,12 +400,12 @@ class EnergyPlusAgent(Agent):
         :return:
         """
         self.advance_simulation(None, None, None, None, None, None)
-        self.EnergyPlus_sim.send_eplus_msg()
+        self.energy_plus_sim.send_eplus_msg()
 
     def advance_simulation(self, peer, sender, bus, topic, headers, message):
         _log.info('Advancing simulation.')
 
-        for obj in self.EnergyPlus_sim.inputs:
+        for obj in self.energy_plus_sim.inputs:
             set_topic = obj['topic'] + '/' + obj['field']
             external = obj.get('external', False)
             if external:
@@ -409,7 +421,7 @@ class EnergyPlusAgent(Agent):
         This method is called when the Agent is about to shutdown.
         Stop EnergyPlus simulation
         """
-        self.EnergyPlus_sim.stop_simulation()
+        self.energy_plus_sim.stop_simulation()
 
     @RPC.export
     def request_new_schedule(self, requester_id, task_id, priority, requests):
@@ -583,7 +595,7 @@ class EnergyPlusAgent(Agent):
             obj['value'] = value
             obj['external'] = external
             obj['last_update'] = datetime.utcnow().isoformat(' ') + 'Z'
-            if not self.EnergyPlus_sim.real_time_periodic:
+            if not self.energy_plus_sim.real_time_periodic:
                 self.on_update_topic_rpc(requester_id, topic, value)
             return SUCCESS
         return FAILURE
@@ -601,11 +613,15 @@ class EnergyPlusAgent(Agent):
 
 def main():
     """Main method called to start the agent."""
-    vip_main(energyplus_example, version=__version__)
+    try:
+        vip_main(EnergyPlusAgent, version=__version__)
+        return 0
+    except Exception as e:
+        _log.error(f'Exception encountered in vip_main: {e}')
+        return 1
 
 
 if __name__ == '__main__':
-    # Entry point for script
     try:
         sys.exit(main())
     except KeyboardInterrupt:
