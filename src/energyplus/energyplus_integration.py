@@ -52,17 +52,39 @@ class EnergyPlusSimIntegration(BaseSimIntegration):
 
     def __init__(self, config, pubsub, core):
         super(EnergyPlusSimIntegration, self).__init__(config)
-        self.pubsub = weakref.ref(pubsub)
-        self.core = weakref.ref(core)
-        self.current_time = 0
-        self.inputs = []
-        self.outputs = []
-        self.current_values = {}
-        self.version = 8.4
+
+        # Configurable by "properties" dict in configuration file.
+        self.size = None
+        self.startmonth = None
+        self.startday = None
+        self.endmonth = None
+        self.endday = None
+        self.timestep = None
+        self.time_scale = 1.0
+        self.cosimulation_sync = None
+        self.real_time_periodic = None
+        self.co_sim_timestep = None
+        self.real_time_flag = False
+        self.base_topic = config.get('base_topic', '')
+
         self.bcvtb_home = str(resources.files('energyplus.bcvtb').joinpath(''))
         self.model = None
-        self.customizedOutT = 0
         self.weather = str(resources.files('energyplus.weather').joinpath('USA_WA_Pasco-Tri.Cities.AP.727845_TMY3.epw'))
+
+        # Configurable in config file outside of "properties" dict:
+        self.inputs = []
+        self.outputs = []
+
+        # Internal properties:
+        self.pubsub = weakref.ref(pubsub)
+        self.core = weakref.ref(core)
+        self.temp_directory = None
+
+        # Are these configurations or interal properties?
+        self.current_time = 0
+        self.current_values = {}
+        self.version = 8.4
+        self.customizedOutT = 0
         self.socketFile = None
         self.variableFile = None
         self.time = 0
@@ -76,10 +98,7 @@ class EnergyPlusSimIntegration(BaseSimIntegration):
         self.eplus_inputs = 0
         self.eplus_outputs = 0
         self.cosim_sync_counter = 0
-        self.time_scale = 1.0
         self.passtime = False
-        self.size = None
-        self.real_time_flag = False
         self.currenthour = datetime.now().hour
         self.currentday = datetime.now().day
         self.currentmonth = datetime.now().month
@@ -91,19 +110,10 @@ class EnergyPlusSimIntegration(BaseSimIntegration):
         self.day = None
         self.minute = None
         self.operation = None
-        self.timestep = None
-        self.cosimulation_sync = None
-        self.real_time_periodic = None
-        self.co_sim_timestep = None
-        self.startmonth = None
-        self.startday = None
-        self.endmonth = None
-        self.endday = None
         self.sim_flag = 0
         self.cwd = os.getcwd()
         self.model_idf_path = config.get('model_idf_path')
         self.output_dir = ''
-        self.temp_directory = None
 
         if 'properties' in self.config and isinstance(self.config['properties'], dict):
             self.__dict__.update(self.config['properties'])
@@ -212,8 +222,7 @@ class EnergyPlusSimIntegration(BaseSimIntegration):
                     lines[i + 5] = '    ' + str(self.endday) + ',                      !- End Day of Month' + '\n'
                 else:
                     lines[i + 2] = '    ' + str(self.currentmonth) + ',                       !- Begin Month' + '\n'
-                    lines[i + 3] = '    ' + str(
-                        self.currentday) + ',                       !- Begin Day of Month' + '\n'
+                    lines[i + 3] = '    ' + str(self.currentday) + ',                       !- Begin Day of Month' + '\n'
                     lines[i + 4] = '    ' + str(endmonth) + ',                      !- End Month' + '\n'
                     lines[i + 5] = '    ' + str(endday) + ',                      !- End Day of Month' + '\n'
         for i in range(len(lines)):
