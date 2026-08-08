@@ -190,12 +190,12 @@ class EnergyPlusAgent(Agent):
             if obj['values'] is not None:
                 for value in obj['values']:
                     out = value
-                    self.vip.pubsub.publish('pubsub', topic, headers, out).get()
+                    self.vip.pubsub.publish('pubsub', topic, headers, out) #.get()
             if obj['fields'] is not None:
                 out = obj['fields']
                 while True:
                     try:
-                        self.vip.pubsub.publish('pubsub', topic, headers, out).get()
+                        self.vip.pubsub.publish('pubsub', topic, headers, out) # .get()
                     except:
                         _log.debug("Again ERROR: retrying publish")
                         gevent.sleep(0.1)
@@ -377,7 +377,7 @@ class EnergyPlusAgent(Agent):
                 self.vip.pubsub.publish('pubsub',
                                         self.tns_actuate,
                                         headers={},
-                                        message={}).get(timeout=10)
+                                        message={}) # .get(timeout=10)
         else:
             if self.energy_plus_sim.hour > self.energy_plus_sim.currenthour or self.energy_plus_sim.passtime:
                 self.energy_plus_sim.passtime = True
@@ -389,7 +389,7 @@ class EnergyPlusAgent(Agent):
                     self.vip.pubsub.publish('pubsub',
                                             self.tns_actuate,
                                             headers={},
-                                            message={}).get(timeout=10)
+                                            message={}) # .get(timeout=10)
             else:
                 self.advance_simulation(None, None, None, None, None, None)
 
