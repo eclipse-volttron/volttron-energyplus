@@ -97,6 +97,9 @@ class EnergyPlusAgent(Agent):
                 properties = model_config.get('properties', {}).copy()
                 properties.update(config.get('properties', {}))
                 config['properties'] = properties
+                # TODO: Should we really be updating, or should configured input/output completely overwrite defaults?
+                #   The current design is a potential issue if someone wants to REMOVE and input/output.
+                #   Just not passing it will not get rid of it.
                 inputs = model_config.get('inputs', {}).copy()
                 inputs.update(config.get('inputs', {}))
                 config['inputs'] = inputs
@@ -187,11 +190,9 @@ class EnergyPlusAgent(Agent):
             if obj['values'] is not None:
                 for value in obj['values']:
                     out = value
-                    _log.info('Sending: ' + topic + ' ' + str(out))
                     self.vip.pubsub.publish('pubsub', topic, headers, out).get()
             if obj['fields'] is not None:
                 out = obj['fields']
-                _log.info(f"Sending: {topic} {out}")
                 while True:
                     try:
                         self.vip.pubsub.publish('pubsub', topic, headers, out).get()
