@@ -156,6 +156,9 @@ class EnergyPlusSimIntegration(BaseSimIntegration):
             else:
                 raise ValueError(
                     'Inputs from configuration must be a list of dictionaries or a dictionary of dictionaries')
+            for io in parsed:
+                if topic := io.get('topic'):
+                    io['topic'] = topic.replace('BASE_TOPIC', self.base_topic)
             return parsed
 
         self.inputs = parse_input_output(self.config.get('inputs', []))
