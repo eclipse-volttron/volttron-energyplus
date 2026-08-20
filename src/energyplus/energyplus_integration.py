@@ -194,10 +194,10 @@ class EnergyPlusSimIntegration(BaseSimIntegration):
             self.exit('No weather specified.')
         model_path = self.output_dir.joinpath(Path(self.model_idf_path).name)
         weather_path = self.output_dir.joinpath(Path(self.weather).name)
-        _log.debug(f"Current Model Path: {model_path}")
-        _log.debug(f"Current Weather Path: {weather_path}")
+        _log.info(f"Current Model Path: {model_path}")
+        _log.info(f"Current Weather Path: {weather_path}")
         bcvtb_dir = Path(self.bcvtb_home).expanduser().resolve()
-        _log.debug('Working in %r', self.output_dir)
+        _log.info('Working in %r', self.output_dir)
 
         self._write_port_file(os.path.join(self.output_dir, 'socket.cfg'))
         self._write_variable_file(os.path.join(self.output_dir, 'variables.cfg'))
@@ -206,7 +206,7 @@ class EnergyPlusSimIntegration(BaseSimIntegration):
             cmd_str = f"cd {self.output_dir}; export BCVTB_HOME={bcvtb_dir}; energyplus -w {weather_path} -r {model_path}"
         else:
             cmd_str = f"export BCVTB_HOME={bcvtb_dir}; runenergyplus {model_path} {weather_path}"
-        _log.debug('Running: %s', cmd_str)
+        _log.info(f'Running: {cmd_str}' )
         f = open(model_path, 'r')
         lines = f.readlines()
         f.close()
@@ -255,7 +255,6 @@ class EnergyPlusSimIntegration(BaseSimIntegration):
         """
         Send inputs to EnergyPlus
         """
-        _log.debug("send_eplus_msg ")
         if self.socket_server:
             args = self.input()
             msg = '%r %r %r 0 0 %r' % (self.vers, self.flag, self.eplus_inputs, self.time)
@@ -263,7 +262,6 @@ class EnergyPlusSimIntegration(BaseSimIntegration):
                 if obj.get('name', None) and obj.get('type', None):
                     msg = msg + ' ' + str(obj.get('value'))
             self.sent = msg + '\n'
-            _log.info('Sending message to EnergyPlus: ' + msg)
             self.sent = self.sent.encode()
             self.socket_server.send(self.sent)
     
@@ -285,7 +283,6 @@ class EnergyPlusSimIntegration(BaseSimIntegration):
         """
         msg = msg.decode("latin-1")
         msg = msg.rstrip()
-        _log.info(f"Received message from EnergyPlus: {msg}")
         arry = msg.split()
         # arry = [float(item) for item in arry]
         for i, item in enumerate(arry):
@@ -293,7 +290,6 @@ class EnergyPlusSimIntegration(BaseSimIntegration):
                 arry[i] = float(item)
             except:
                 pass
-        _log.info(f"Received message from EnergyPlus: {arry}")
         slot = 6
         self.sim_flag = arry[1]
 
@@ -312,7 +308,6 @@ class EnergyPlusSimIntegration(BaseSimIntegration):
                 if name_value is not None and dynamic_default_value is not None:
                     slot = 6
                     for output in self.outputs:
-                        _log.debug("Output: {}".format(output))
                         default_value = output.get('default', None)
                         if default_value is not None:
                             if default_value.lower().find(name_value.lower()) != -1:
@@ -331,16 +326,12 @@ class EnergyPlusSimIntegration(BaseSimIntegration):
                         self.exit('Unable to convert received value to double.')
                     if "currentmonthv" in type_value.lower():
                         self.month = float(arry[slot])
-                        _log.debug(f"month {self.month}")
                     elif "currentdayofmonthv" in type_value.lower():
                         self.day = float(arry[slot])
-                        _log.debug(f"day {self.day}")
                     elif "currenthourv" in type_value.lower():
                         self.hour = float(arry[slot])
-                        _log.debug(f"hour {self.hour}")
                     elif "currentminutev" in type_value.lower():
                         self.minute = float(arry[slot])
-                        _log.debug(f"minute: {self.minute}")
                     elif field_value is not None and 'operation' in field_value.lower():
                         self.operation = float(arry[slot])
                         _log.debug(f"operation (1:on, 0: off) {self.operation}")
@@ -478,7 +469,7 @@ class SocketServer:
             return msg
 
     def start(self):
-        _log.debug('Starting socket server')
+        _log.info('Starting socket server')
         self.run()
 
     def stop(self):
@@ -487,9 +478,9 @@ class SocketServer:
 
     def listen(self):
         self.sock.listen(10)
-        _log.debug('server now listening')
+        _log.info('server now listening')
         self.client, addr = self.sock.accept()
-        _log.debug('Connected with ' + addr[0] + ':' + str(addr[1]))
+        _log.info('Connected with ' + addr[0] + ':' + str(addr[1]))
         while True:
             msg = self.recv()
             if msg:
