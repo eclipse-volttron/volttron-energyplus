@@ -35,6 +35,7 @@ from datetime import datetime, timedelta as td
 from importlib import resources
 from math import modf
 from pathlib import Path
+from typing import Any
 
 from importlib.metadata import distribution, PackageNotFoundError
 try:
@@ -410,7 +411,7 @@ class EnergyPlusAgent(Agent):
                 value = obj['value'] if 'value' in obj else obj['default']
             else:
                 value = obj['default']
-            self.update_topic_rpc(sender, set_topic, value, external)
+            self.update_topic_rpc(set_topic, value, external)
         return
 
     @Core.receiver("onstop")
@@ -470,7 +471,7 @@ class EnergyPlusAgent(Agent):
         return result
 
     @RPC.export
-    def get_point(self, topic, **kwargs):
+    def get_point(self, path: str = None, point_name: str = None, **kwargs) -> Any:
         """RPC method
 
         Gets the value of a specific point on a device_name.
@@ -484,7 +485,15 @@ class EnergyPlusAgent(Agent):
         :rtype: any base python type
 
         """
-        obj = self.find_best_match(topic)
+        # Support for old-actuator-style keyword arguments.
+        path = path if path else kwargs.get('topic', None)
+        point_name = point_name if point_name else kwargs.get('point', None)
+        if path is None:
+            # DEPRECATED: Only allows topic to be None to permit use of old-actuator-style keyword argument "topic".
+            raise TypeError('Argument "path" is required.')
+        equip_id = self._equipment_id(path, point_name)
+
+        obj = self.find_best_match(equip_id)
         if obj is not None:  # we have an exact match to the  <device_name topic>/<point name>, so return the first value
             value = obj.get('value', None)
             if value is None:
@@ -492,78 +501,108 @@ class EnergyPlusAgent(Agent):
             return value
         return None
 
+    def _equipment_id(self, path: str, point: str = None) -> str:
+        path = path.strip('/')
+        if point is not None:
+            path = '/'.join([path, point])
+        # # If path already starts with "devices/", skip prefixing
+        # if not path.startswith('devices' + '/'):
+        #     path = '/'.join(['devices', path])
+        return path
+
     @RPC.export
-    def set_point(self, requester_id, topic, value, **kwargs):
+    def set_point(self, path: str, point_name: str | None, value: Any, *args, **kwargs) -> Any:
         """RPC method
 
         Sets the value of a specific point on a device.
         Does not require the device be scheduled.
-
-        :param requester_id: Identifier given when requesting schedule.
-        :param topic: The topic of the point to set in the
-                      format <device topic>/<point name>
-        :param value: Value to set point to.
-        :param **kwargs: These get dropped on the floor
-        :type topic: str
-        :type requester_id: str
-        :type value: any basic python type
-        :returns: value point was actually set to.
-        :rtype: any base python type
-
         """
-        topic = topic.strip('/')
+        sender = self.vip.rpc.context.vip_message.peer
+
+        # Support for old-actuator-style arguments.
+        topic = kwargs.get('topic')
+        if topic:
+            path = topic
+        elif path == sender or len(args) > 0:
+            # Function was likely called with actuator-style positional arguments. Reassign variables to match.
+            _log.info('Deprecated actuator-style positional arguments detected in set_point().'
+                      ' Please consider converting code to use set() method.')
+            path, point_name = (point_name, args[0]) if len(args) >= 1 else point_name, None
+        point_name = point_name if point_name else kwargs.get('point', None)
+
+        equip_id = self._equipment_id(path, point_name)
+        if not self.find_best_match(equip_id):
+            if ('/' in path) and self.find_best_match(path):
+                equip_id = path
+            elif ('/' in point_name) and self.find_best_match(point_name):
+                equip_id = point_name
+            else:
+                raise RuntimeError(f"Failed to find a known topic to set for parameters:"
+                                   f" path={path}, point_name={point_name}, value={value}, args={args}.")
+        path = path.strip('/')
         external = True
         if value is None:
-            result = self.revert_point(requester_id, topic)
+            result = self.revert_point(topic=equip_id)
         else:
-            result = self.update_topic_rpc(requester_id, topic, value, external)
-            _log.info("Writing: {topic} : {value} {result}".format(topic=topic, value=value, result=result))
+            result = self.update_topic_rpc(equip_id, value, external)
+            _log.info("Writing: {topic} : {value} {result}".format(topic=equip_id, value=value, result=result))
         if result == SUCCESS:
             return value
         else:
-            raise RuntimeError("Failed to set value of " + topic)
+            raise RuntimeError("Failed to set value of " + equip_id)
 
     @RPC.export
-    def revert_point(self, requester_id, topic, **kwargs):
+    def revert_point(self, path: str, point_name: str, **kwargs):
         """RPC method
 
         Reverts the value of a specific point on a device to a default state.
         Does not require the device be scheduled.
-
-        :param requester_id: Identifier given when requesting schedule.
-        :param topic: The topic of the point to revert in the
-                      format <device topic>/<point name>
-        :param **kwargs: These get dropped on the floor
-        :type topic: str
-        :type requester_id: str
-
         """
-        obj = self.find_best_match(topic)
+        sender = self.vip.rpc.context.vip_message.peer
+
+        # Support for old-actuator-style arguments.
+        topic = kwargs.get('topic')
+        if topic:
+            path, point_name = topic, None
+        elif path == sender:
+            # Function was likely called with actuator-style positional arguments. Reassign variables to match.
+            _log.info('Deprecated actuator-style positional arguments detected in revert_point().'
+                      ' Please consider converting code to use revert() method.')
+            path, point_name = point_name, None
+
+        equip_id = self._equipment_id(path, point_name)
+        obj = self.find_best_match(equip_id)
         if obj and 'default' in obj:
             value = obj.get('default')
-            _log.info("Reverting topic " + topic + " to " + str(value))
+            _log.info("Reverting topic " + equip_id + " to " + str(value))
             external = False
-            result = self.update_topic_rpc(requester_id, topic, value, external)
+            result = self.update_topic_rpc(equip_id, value, external)
         else:
             result = FAILURE
             _log.warning("Unable to revert topic. No topic match or default defined!")
         return result
 
     @RPC.export
-    def revert_device(self, requester_id, device_name, **kwargs):
+    def revert_device(self, path: str, *args, **kwargs):
         """RPC method
 
         Reverts all points on a device to a default state.
         Does not require the device be scheduled.
-
-        :param requester_id: Identifier given when requesting schedule.
-        :param topic: The topic of the device to revert (without a point!)
-        :param **kwargs: These get dropped on the floor
-        :type topic: str
-        :type requester_id: str
-
         """
-        device_name = device_name.strip('/')
+
+        sender = self.vip.rpc.context.vip_message.peer
+
+        # Support for old-actuator-style arguments.
+        topic = kwargs.get('topic')
+        if topic:
+            path = topic
+        elif path == sender and len(args) > 0:
+            # Function was likely called with actuator-style positional arguments. Reassign variables to match.
+            _log.info('Deprecated actuator-style positional arguments detected in revert_device().'
+                      ' Please consider converting code to use revert() method.')
+            path = args[0]
+
+        device_name = path.strip('/')
         # we will assume that the topic is only the <device topic> and revert all matches at this level!
         objs = self.get_inputs_from_topic(device_name)
         if objs is not None:
@@ -574,15 +613,14 @@ class EnergyPlusAgent(Agent):
                 if 'default' in obj:
                     value = obj.get('default')
                     _log.info("Reverting " + topic + " to " + str(value))
-                    self.update_topic_rpc(requester_id, topic, value, external)
+                    self.update_topic_rpc(topic, value, external)
                 else:
                     _log.warning("Unable to revert " + topic + ". No default defined!")
 
-    def update_topic_rpc(self, requester_id, topic, value, external):
+    def update_topic_rpc(self, topic, value, external):
         """
         Find the best match for the topic and update the objects with
         received values
-        :param requester_id:
         :param topic:
         :param value:
         :param external:
@@ -594,14 +632,13 @@ class EnergyPlusAgent(Agent):
             obj['external'] = external
             obj['last_update'] = datetime.utcnow().isoformat(' ') + 'Z'
             if not self.energy_plus_sim.real_time_periodic:
-                self.on_update_topic_rpc(requester_id, topic, value)
+                self.on_update_topic_rpc(topic, value)
             return SUCCESS
         return FAILURE
 
-    def on_update_topic_rpc(self, requester_id, topic, value):
+    def on_update_topic_rpc(self,topic, value):
         """
         Send to EnergyPlus
-        :param requester_id:
         :param topic:
         :param value:
         :return:
