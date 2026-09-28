@@ -18,9 +18,9 @@ For installing setup in Ubuntu based systems,
 1. Download and install EnergyPlus (ver 8.5.0)
 
    ```shell
-   wget https://github.com/NREL/EnergyPlus/releases/download/v8.5.0/EnergyPlus-8.5.0-c87e61b44b-Linux-x86_64.sh
-   chmod +x EnergyPlus-8.5.0-c87e61b44b-Linux-x86_64.sh
-   sudo ./EnergyPlus-8.5.0-c87e61b44b-Linux-x86_64.sh 
+   wget https://github.com/NatLabRockies/EnergyPlus/releases/download/v8.4.0-Update1/EnergyPlus-8.4.0-09f5359d8a-Linux-x86_64.sh
+   chmod +x EnergyPlus-8.4.0-09f5359d8a-Linux-x86_64.sh
+   sudo ./EnergyPlus-8.4.0-09f5359d8a-Linux-x86_64.sh 
    ```
 1. You can verify the installation with. 
    ```shell

@@ -97,6 +97,9 @@ class EnergyPlusAgent(Agent):
                 properties = model_config.get('properties', {}).copy()
                 properties.update(config.get('properties', {}))
                 config['properties'] = properties
+                # TODO: Should we really be updating, or should configured input/output completely overwrite defaults?
+                #   The current design is a potential issue if someone wants to REMOVE and input/output.
+                #   Just not passing it will not get rid of it.
                 inputs = model_config.get('inputs', {}).copy()
                 inputs.update(config.get('inputs', {}))
                 config['inputs'] = inputs
@@ -159,7 +162,7 @@ class EnergyPlusAgent(Agent):
         :return:
         """
         _now = self._create_simulation_datetime()
-        _log.info(f"Publish the building response for timestamp: {_now}.")
+        _log.debug(f"Publish the building response for timestamp: {_now}.")
 
         headers = {headers_mod.DATE: _now, headers_mod.TIMESTAMP: _now}
         topics = collections.OrderedDict()
@@ -187,11 +190,9 @@ class EnergyPlusAgent(Agent):
             if obj['values'] is not None:
                 for value in obj['values']:
                     out = value
-                    _log.info('Sending: ' + topic + ' ' + str(out))
                     self.vip.pubsub.publish('pubsub', topic, headers, out).get()
             if obj['fields'] is not None:
                 out = obj['fields']
-                _log.info(f"Sending: {topic} {out}")
                 while True:
                     try:
                         self.vip.pubsub.publish('pubsub', topic, headers, out).get()
@@ -249,7 +250,7 @@ class EnergyPlusAgent(Agent):
         :return:
         """
         msg = message if type(message) == type([]) else [message]
-        _log.info(f"Received: {topic} {msg}")
+        _log.debug(f"Received: {topic} {msg}")
         self.update_topic(topic, headers, msg)
 
     def update_topic(self, topic, headers, message):
@@ -351,6 +352,7 @@ class EnergyPlusAgent(Agent):
         """
         self.outputs = self.energy_plus_sim.outputs
         if self.energy_plus_sim.sim_flag != '1':
+            # IF EnergyPlus has reported simulation is complete, publish.
             self.publish_all_outputs()
         if self.energy_plus_sim.cosimulation_sync:
             self.check_advance()
@@ -403,7 +405,7 @@ class EnergyPlusAgent(Agent):
         self.energy_plus_sim.send_eplus_msg()
 
     def advance_simulation(self, peer, sender, bus, topic, headers, message):
-        _log.info('Advancing simulation.')
+        _log.debug('Advancing simulation.')
 
         for obj in self.energy_plus_sim.inputs:
             set_topic = obj['topic'] + '/' + obj['field']
