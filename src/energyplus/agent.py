@@ -162,7 +162,6 @@ class EnergyPlusAgent(Agent):
         :return:
         """
         _now = self._create_simulation_datetime()
-        _log.debug(f"Publish the building response for timestamp: {_now}.")
 
         headers = {headers_mod.DATE: _now, headers_mod.TIMESTAMP: _now}
         topics = collections.OrderedDict()
@@ -190,12 +189,12 @@ class EnergyPlusAgent(Agent):
             if obj['values'] is not None:
                 for value in obj['values']:
                     out = value
-                    self.vip.pubsub.publish('pubsub', topic, headers, out).get()
+                    self.vip.pubsub.publish('pubsub', topic, headers, out) #.get()
             if obj['fields'] is not None:
                 out = obj['fields']
                 while True:
                     try:
-                        self.vip.pubsub.publish('pubsub', topic, headers, out).get()
+                        self.vip.pubsub.publish('pubsub', topic, headers, out) # .get()
                     except:
                         _log.debug("Again ERROR: retrying publish")
                         gevent.sleep(0.1)
@@ -250,7 +249,7 @@ class EnergyPlusAgent(Agent):
         :return:
         """
         msg = message if type(message) == type([]) else [message]
-        _log.debug(f"Received: {topic} {msg}")
+
         self.update_topic(topic, headers, msg)
 
     def update_topic(self, topic, headers, message):
@@ -311,7 +310,6 @@ class EnergyPlusAgent(Agent):
         """
         objs = []
         for obj in self.energy_plus_sim.inputs:
-            _log.debug("EPLUS: get_inputs_from_topic: {}".format(obj))
             if obj.get('topic') == topic:
                 objs.append(obj)
         topic = "/".join(["devices", topic, "all"])
@@ -352,7 +350,6 @@ class EnergyPlusAgent(Agent):
         """
         self.outputs = self.energy_plus_sim.outputs
         if self.energy_plus_sim.sim_flag != '1':
-            # IF EnergyPlus has reported simulation is complete, publish.
             self.publish_all_outputs()
         if self.energy_plus_sim.cosimulation_sync:
             self.check_advance()
@@ -378,7 +375,7 @@ class EnergyPlusAgent(Agent):
                 self.vip.pubsub.publish('pubsub',
                                         self.tns_actuate,
                                         headers={},
-                                        message={}).get(timeout=10)
+                                        message={}) # .get(timeout=10)
         else:
             if self.energy_plus_sim.hour > self.energy_plus_sim.currenthour or self.energy_plus_sim.passtime:
                 self.energy_plus_sim.passtime = True
@@ -390,7 +387,7 @@ class EnergyPlusAgent(Agent):
                     self.vip.pubsub.publish('pubsub',
                                             self.tns_actuate,
                                             headers={},
-                                            message={}).get(timeout=10)
+                                            message={}) # .get(timeout=10)
             else:
                 self.advance_simulation(None, None, None, None, None, None)
 
@@ -405,7 +402,6 @@ class EnergyPlusAgent(Agent):
         self.energy_plus_sim.send_eplus_msg()
 
     def advance_simulation(self, peer, sender, bus, topic, headers, message):
-        _log.debug('Advancing simulation.')
 
         for obj in self.energy_plus_sim.inputs:
             set_topic = obj['topic'] + '/' + obj['field']
@@ -521,11 +517,11 @@ class EnergyPlusAgent(Agent):
             result = self.revert_point(requester_id, topic)
         else:
             result = self.update_topic_rpc(requester_id, topic, value, external)
-            _log.debug("Writing: {topic} : {value} {result}".format(topic=topic, value=value, result=result))
+            _log.info("Writing: {topic} : {value} {result}".format(topic=topic, value=value, result=result))
         if result == SUCCESS:
             return value
         else:
-            raise RuntimeError("Failed to set value: " + result)
+            raise RuntimeError("Failed to set value of " + topic)
 
     @RPC.export
     def revert_point(self, requester_id, topic, **kwargs):
@@ -545,7 +541,7 @@ class EnergyPlusAgent(Agent):
         obj = self.find_best_match(topic)
         if obj and 'default' in obj:
             value = obj.get('default')
-            _log.debug("Reverting topic " + topic + " to " + str(value))
+            _log.info("Reverting topic " + topic + " to " + str(value))
             external = False
             result = self.update_topic_rpc(requester_id, topic, value, external)
         else:
@@ -577,7 +573,7 @@ class EnergyPlusAgent(Agent):
                 external = False
                 if 'default' in obj:
                     value = obj.get('default')
-                    _log.debug("Reverting " + topic + " to " + str(value))
+                    _log.info("Reverting " + topic + " to " + str(value))
                     self.update_topic_rpc(requester_id, topic, value, external)
                 else:
                     _log.warning("Unable to revert " + topic + ". No default defined!")
