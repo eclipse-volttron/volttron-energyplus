@@ -13,7 +13,7 @@ include = ["src/config", "src/ep_building1.yml"]
 
 name = "volttron-energyplus"
 version = "2.0.0rc0"
-description = ""
+description = "Agent for running EnergyPlus simulations and publishing results to the Volttron message bus."
 authors = ["VOLTTRON Team <volttron@pnnl.gov>"]
 license = "Apache-2.0"
 readme = "README.md"
