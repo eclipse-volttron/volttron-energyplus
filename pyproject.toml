@@ -32,7 +32,7 @@ classifiers = [
 
 [tool.poetry.dependencies]
 python = ">=3.10,<4.0"
-volttron-core = ">=2.0.0rc0"
+volttron-core = ">=2.0.0rc36"
 
 [tool.poetry.group.dev.dependencies]
 volttron-testing = "^0.4.0rc0"
