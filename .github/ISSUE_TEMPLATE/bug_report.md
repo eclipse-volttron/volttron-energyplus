@@ -2,7 +2,7 @@
 name: Bug report
 about: Create a report to help us improve
 title: ''
-labels: unconfirmed
+labels: ''
 assignees: ''
 
 ---
@@ -13,8 +13,8 @@ A clear and concise description of what the bug is.
 **To Reproduce**
 Steps to reproduce the behavior:
 1. Go to '...'
-2. Run command '...'
-3. Scroll down to '...'
+2. Click on '....'
+3. Scroll down to '....'
 4. See error
 
 **Expected behavior**
@@ -23,10 +23,9 @@ A clear and concise description of what you expected to happen.
 **Screenshots**
 If applicable, add screenshots to help explain your problem.
 
-**System (please complete the following information):**
-- `volttron-economizer-rcx` version: [e.g. 0.2.1]
-- Python version: [e.g. 3.10]
-- OS: [Windows/Linux]
+**Operating System (please complete the following information):**
+ - OS: [e.g. iOS]
+ - Volttron Version [develop, releases/8.2, main]
 
 **Additional context**
 Add any other context about the problem here.
