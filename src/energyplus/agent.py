@@ -31,7 +31,7 @@ import logging
 import sys
 
 
-from datetime import datetime, timedelta as td
+from datetime import datetime, timedelta as td, timezone
 from importlib import resources
 from math import modf
 from pathlib import Path
@@ -116,7 +116,7 @@ class EnergyPlusAgent(Agent):
 
         self.energy_plus_sim = EnergyPlusSimIntegration(config, self.vip.pubsub, self.core)
 
-        self._now = datetime.utcnow() # TODO: Can we use aware timestamps?
+        self._now = datetime.now(timezone.utc).replace(tzinfo=None)  # TODO: Can we use aware timestamps?
         self.num_of_pub = 0
 
         # Exit if EnergyPlus isn't installed in the current environment.
@@ -270,7 +270,7 @@ class EnergyPlusAgent(Agent):
             obj['value'] = value
             obj['message'] = message[0]
             obj['message_meta'] = message[1]
-            obj['last_update'] = headers.get(headers_mod.DATE, datetime.utcnow().isoformat(' ') + 'Z')
+            obj['last_update'] = headers.get(headers_mod.DATE, datetime.now(timezone.utc).replace(tzinfo=None).isoformat(' ') + 'Z')
             self.send_on_all_inputs_updated()
 
     def send_on_all_inputs_updated(self):
@@ -630,7 +630,7 @@ class EnergyPlusAgent(Agent):
         if obj is not None:
             obj['value'] = value
             obj['external'] = external
-            obj['last_update'] = datetime.utcnow().isoformat(' ') + 'Z'
+            obj['last_update'] = datetime.now(timezone.utc).replace(tzinfo=None).isoformat(' ') + 'Z'
             if not self.energy_plus_sim.real_time_periodic:
                 self.on_update_topic_rpc(topic, value)
             return SUCCESS
